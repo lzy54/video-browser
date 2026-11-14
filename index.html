@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#08090d">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="SwipeLocal">
+  <meta name="description" content="从 iPhone 相册选择视频，像刷短视频一样离线观看。视频不会上传。">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="apple-touch-icon" href="./icon-192.png">
+  <link rel="icon" type="image/png" href="./icon-192.png">
+  <title>SwipeLocal · 本地视频流</title>
+  <style>
+    :root { color-scheme:dark; font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Helvetica Neue",sans-serif; --fg:#f8f8fb; --muted:#c1c2cd; --pink:#f95b92; }
+    * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+    html,body { height:100%; margin:0; padding:0; background:#08090d; color:var(--fg); overflow:hidden; overscroll-behavior:none; }
+    body { user-select:none; -webkit-user-select:none; }
+    button, input { font:inherit; }
+    button { cursor:pointer; -webkit-appearance:none; appearance:none; }
+    button:focus-visible, input:focus-visible { outline:2px solid #ff75a4; outline-offset:3px; }
+    .app { position:relative; width:100%; height:100%; height:100dvh; overflow:hidden; background:#08090d; }
+    .stage { position:absolute; inset:0; display:flex; justify-content:center; align-items:center; background:#08090d; overflow:hidden; touch-action:none; }
+    .stage:before { content:""; position:absolute; inset:0; background:radial-gradient(circle at 65% 25%,#252139 0,#08090d 60%); pointer-events:none; }
+    video { position:absolute; width:100%; height:100%; object-fit:cover; display:none; background:black; }
+    video.contain { object-fit:contain; }
+    .shade-top,.shade-bottom { position:absolute; left:0; right:0; z-index:2; pointer-events:none; }
+    .shade-top { top:0; height:170px; background:linear-gradient(#000a,transparent); }
+    .shade-bottom { bottom:0; height:245px; background:linear-gradient(transparent,#000c); }
+    .header { position:absolute; z-index:5; top:0; left:0; right:0; padding:calc(env(safe-area-inset-top) + 17px) 18px 0; display:flex; justify-content:space-between; align-items:center; gap:10px; }
+    .brand { display:flex; flex-direction:column; gap:2px; }
+    .brand strong { letter-spacing:-0.7px; font-size:21px; line-height:1.1; }
+    .brand small { color:#ececf0b8; font-size:11px; letter-spacing:0.25px; }
+    .header-actions { display:flex; align-items:center; gap:9px; }
+    .chip,.square { background:#171923a8; color:var(--fg); border:1px solid #ffffff35; backdrop-filter:blur(15px); -webkit-backdrop-filter:blur(15px); }
+    .chip { padding:9px 11px; border-radius:99px; font-size:12px; font-variant-numeric:tabular-nums; }
+    .square { width:40px; height:40px; border-radius:13px; font-size:22px; line-height:1; display:grid; place-items:center; }
+    .intro { z-index:3; position:absolute; top:50%; left:0; right:0; transform:translateY(-50%); display:flex; flex-direction:column; align-items:center; padding:26px; text-align:center; gap:16px; }
+    .logo { width:88px; height:88px; border-radius:27px; display:grid; place-items:center; font-size:36px; font-weight:900; letter-spacing:-3px; color:white; background:linear-gradient(135deg,#ff78a3,#db477e 55%,#8a58ff); box-shadow:0 25px 65px #fb4e7940; }
+    .intro h1 { font-size:26px; letter-spacing:-0.8px; margin:8px 0 0; }
+    .intro p { max-width:330px; margin:0; line-height:1.65; color:#c4c5cf; font-size:14px; }
+    .main-btn { display:flex; justify-content:center; align-items:center; gap:8px; width:min(300px,100%); padding:15px 20px; border-radius:16px; border:0; color:white; font-size:16px; font-weight:700; background:linear-gradient(100deg,#ff678f,#e74d85); box-shadow:0 13px 30px #ee53843b; }
+    .opt { display:flex; align-items:center; gap:9px; font-size:12px; color:#c4c5cf; line-height:1.5; max-width:315px; text-align:left; }
+    .opt input { width:17px; height:17px; accent-color:#ff6892; flex:none; }
+    .privacy { color:#8e91a2; font-size:11px; line-height:1.5; max-width:280px; }
+    .controls { display:none; position:absolute; right:13px; bottom:calc(env(safe-area-inset-bottom) + 128px); z-index:5; flex-direction:column; gap:17px; align-items:center; }
+    .tool { display:flex; flex-direction:column; align-items:center; gap:5px; color:white; font-size:10px; text-shadow:0 1px 5px #000c; }
+    .round { height:46px; width:46px; border-radius:50%; background:#14151f77; backdrop-filter:blur(6px); border:1px solid #ffffff29; color:white; font-size:21px; display:grid; place-items:center; }
+    .bottom { display:none; position:absolute; bottom:0; left:0; right:0; z-index:4; padding:0 86px calc(env(safe-area-inset-bottom) + 22px) 19px; }
+    .filename { font-weight:650; font-size:15px; line-height:1.35; text-shadow:0 2px 8px #000d; white-space:nowrap; text-overflow:ellipsis; overflow:hidden; }
+    .sub { font-size:12px; margin-top:6px; color:#d1d1d8; }
+    .swipehint { font-size:11px; color:#ffffff9d; margin-top:11px; }
+    .progress { position:absolute; z-index:4; bottom:0; left:0; height:2px; width:100%; background:#ffffff46; }
+    .bar { height:100%; width:0; background:linear-gradient(to right,#ff78a4,#fff); transition:width .08s linear; }
+    .play-pulse { position:absolute; z-index:5; top:50%; left:50%; transform:translate(-50%,-50%); width:74px; height:74px; border-radius:50%; background:#0007; display:none; place-items:center; font-size:35px; pointer-events:none; }
+    .loading { position:absolute; z-index:4; left:50%; top:50%; transform:translate(-50%,-50%); display:none; font-size:13px; padding:10px 14px; background:#0009; border-radius:20px; color:#ddd; }
+    .toast { position:absolute; z-index:20; bottom:calc(env(safe-area-inset-bottom) + 98px); left:50%; transform:translateX(-50%); max-width:min(92%,380px); background:#242731ec; border:1px solid #ffffff2c; border-radius:13px; padding:11px 14px; font-size:12px; line-height:1.4; color:#fff; box-shadow:0 10px 32px #0009; display:none; text-align:center; }
+    .modal { position:absolute; inset:0; z-index:15; background:#000b; padding:24px; display:none; align-items:center; justify-content:center; backdrop-filter:blur(6px); }
+    .dialog { width:min(100%,360px); background:#191b26; border:1px solid #ffffff27; border-radius:24px; padding:24px; box-shadow:0 25px 90px #000b; }
+    .dialog h2 { font-size:20px; margin:0 0 12px; }
+    .dialog p { line-height:1.6; color:#c9c9d5; font-size:13px; margin:0 0 20px; }
+    .dialog-row { display:flex; gap:8px; margin-top:20px; }
+    .dialog-row button { border:0; color:white; padding:12px; border-radius:11px; flex:1; background:#353744; font-size:13px; }
+    .dialog-row .danger { background:#bb385b; }
+    .dialog-row a { border:0; color:white; padding:12px; border-radius:11px; flex:1; background:#353744; font-size:13px; text-decoration:none; text-align:center; }
+    .round:disabled { opacity:.55; cursor:wait; }
+    .frame-dialog { max-height:calc(100dvh - 65px); overflow-y:auto; }
+    .frame-preview { display:block; width:100%; max-height:43dvh; object-fit:contain; background:#08090d; border:1px solid #ffffff22; border-radius:13px; -webkit-touch-callout:default; -webkit-user-select:auto; user-select:auto; }
+    .frame-detail { color:#979aab; font-size:11px; margin-top:10px; text-align:center; }
+    .frame-dialog p { margin:13px 0 0; }
+    .notice { position:absolute; left:16px; right:16px; bottom:calc(env(safe-area-inset-bottom) + 12px); text-align:center; color:#737787; font-size:11px; }
+    @media(min-width:650px) { .app { width:min(430px,100%); margin:auto; box-shadow:0 0 0 1px #20212a,0 0 70px #000; } }
+  </style>
+</head>
+<body>
+  <main class="app" id="app">
+    <div class="stage" id="stage">
+      <video id="video" playsinline webkit-playsinline loop preload="auto" muted></video>
+      <div class="loading" id="loading">正在加载视频…</div>
+      <div class="play-pulse" id="playPulse">▶</div>
+      <div class="shade-top" id="shadeTop" style="display:none"></div>
+      <div class="shade-bottom" id="shadeBottom" style="display:none"></div>
+      <section class="intro" id="intro">
+        <div class="logo" aria-hidden="true">▶</div>
+        <h1>你的私人短视频流</h1>
+        <p>从 iPhone 相册挑选视频，直接上滑观看。无需上传、无需账户、无需开发者付费。</p>
+        <button class="main-btn" id="pickMain">＋ 从相册选择视频</button>
+        <label class="opt"><input type="checkbox" id="saveChoice">保存导入的视频，方便下次打开（会额外占用本机存储）</label>
+        <div class="privacy">视频只在这台设备上处理。未勾选保存时，退出后可能需要重新选择。</div>
+      </section>
+    </div>
+    <div class="header">
+      <div class="brand"><strong>SwipeLocal</strong><small>PRIVATE VIDEO FEED</small></div>
+      <div class="header-actions"><span class="chip" id="counter" style="display:none">0 / 0</span><button class="square" id="settingsBtn" title="导入设置" aria-label="导入设置">⚙</button><button class="square" id="pickHeader" title="导入视频" aria-label="导入视频">＋</button></div>
+    </div>
+    <aside class="controls" id="controls">
+      <div class="tool"><button class="round" id="soundBtn" aria-label="开启或关闭声音">🔇</button><span id="soundLabel">静音</span></div>
+      <div class="tool"><button class="round" id="fitBtn" aria-label="切换画面填充方式">⤢</button><span id="fitLabel">铺满</span></div>
+      <div class="tool"><button class="round" id="saveFrameBtn" aria-label="截取并保存视频当前画面" title="截图当前帧">📸</button><span>截图</span></div>
+      <div class="tool"><button class="round" id="deleteBtn" aria-label="从播放列表移除">✕</button><span>移除</span></div>
+    </aside>
+    <section class="bottom" id="bottom"><div class="filename" id="filename"></div><div class="sub" id="clipStatus"></div><div class="swipehint">↑ 上滑下一个　↓ 下滑上一个　·　轻点暂停</div></section>
+    <div class="progress" id="progress" style="display:none"><div class="bar" id="progressBar"></div></div>
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <div class="modal" id="settingsModal" role="dialog" aria-modal="true" aria-label="导入设置">
+      <div class="dialog"><h2>导入与存储</h2><p>不保存：视频仅在当前打开期间可用，重新启动需重新导入。保存：复制到这款网页应用的本地存储，可能占用较大空间，也可能被系统清理。</p><label class="opt"><input type="checkbox" id="saveChoiceModal">以后导入的视频保存供下次使用</label><div class="dialog-row"><button id="closeSettings">完成</button><button id="pickFromSettings" class="danger">添加视频</button></div></div>
+    </div>
+    <div class="modal" id="deleteModal" role="dialog" aria-modal="true" aria-label="移除视频">
+      <div class="dialog"><h2>移除这个视频？</h2><p>只从 SwipeLocal 播放列表中移除。如果曾保存到此应用，将删除应用内的副本，不会删除照片 App 里的原视频。</p><div class="dialog-row"><button id="cancelDelete">取消</button><button id="confirmDelete" class="danger">确认移除</button></div></div>
+    </div>
+    <div class="modal" id="frameModal" role="dialog" aria-modal="true" aria-label="保存当前视频帧">
+      <div class="dialog frame-dialog">
+        <h2>保存当前帧</h2>
+        <img class="frame-preview" id="framePreview" alt="从视频截取的当前画面，可长按保存到照片" draggable="false">
+        <div class="frame-detail" id="frameDetail"></div>
+        <p><strong>存入 iPhone 照片：</strong>长按上方图片，选择“存储图像”或“存储到照片”。也可尝试“分享图片”中的保存选项。</p>
+        <div class="dialog-row"><button id="shareFrame">分享图片</button><a id="downloadFrame" href="#" download>下载图片</a></div>
+        <div class="dialog-row"><button id="closeFrame">返回视频</button></div>
+      </div>
+    </div>
+    <input id="fileInput" type="file" accept="video/*,.mov,.mp4,.m4v" multiple hidden>
+  </main>
+  <script>
+  (() => {
+    'use strict';
+    const $ = id => document.getElementById(id);
+    const video = $('video'), stage = $('stage'), picker = $('fileInput');
+    const entries = [];
+    const urls = new Map();
+    let activeIndex = -1, showToken = 0, wantsSound = false, contain = false;
+    let toastTimer = 0, pressStart = null, lastSwipe = 0;
+    let currentFrameFile = null, currentFrameUrl = null, resumeAfterFrame = false, capturePending = false;
+    const key = 'swipelocal-save-choice';
+    let shouldSave = localStorage.getItem(key) === 'true';
+    $('saveChoice').checked = shouldSave;
+    $('saveChoiceModal').checked = shouldSave;
+
+    function toast(message, duration=3500) {
+      const el=$('toast'); el.textContent=message; el.style.display='block';
+      clearTimeout(toastTimer); toastTimer=setTimeout(()=>el.style.display='none',duration);
+    }
+    function refresh() {
+      const has = entries.length>0 && activeIndex>=0;
+      $('intro').style.display=has?'none':'flex';
+      $('controls').style.display=has?'flex':'none';
+      $('bottom').style.display=has?'block':'none';
+      $('progress').style.display=has?'block':'none';
+      $('shadeTop').style.display=has?'block':'none';
+      $('shadeBottom').style.display=has?'block':'none';
+      $('counter').style.display=has?'inline-block':'none';
+      if (!has) { video.pause(); video.removeAttribute('src'); video.load(); video.style.display='none'; return; }
+      const item=entries[activeIndex];
+      $('counter').textContent=`${activeIndex+1} / ${entries.length}`;
+      $('filename').textContent=item.name;
+      $('clipStatus').textContent=item.saved?'● 已保存在本机':'● 临时导入 · 退出后可能失效';
+      $('soundBtn').textContent=wantsSound?'🔊':'🔇';
+      $('soundLabel').textContent=wantsSound?'声音开启':'静音';
+      $('fitLabel').textContent=contain?'完整画面':'铺满屏幕';
+    }
+    function makeId() {
+      return (crypto.randomUUID ? crypto.randomUUID() : Date.now()+'-'+Math.random().toString(16).slice(2));
+    }
+    function openDb() {
+      return new Promise((resolve,reject) => {
+        if (!('indexedDB' in window)) { reject(new Error('浏览器不支持 IndexedDB')); return; }
+        const req=indexedDB.open('swipelocal-v1',1);
+        req.onupgradeneeded=()=>{
+          const db=req.result;
+          if(!db.objectStoreNames.contains('meta'))db.createObjectStore('meta',{keyPath:'id'});
+          if(!db.objectStoreNames.contains('media'))db.createObjectStore('media',{keyPath:'id'});
+        };
+        req.onsuccess=()=>resolve(req.result);
+        req.onerror=()=>reject(req.error);
+      });
+    }
+    let dbPromise=openDb().catch(e=>{ console.warn('IDB unavailable',e);return null; });
+    async function putSaved(entry) {
+      const db=await dbPromise; if(!db)throw new Error('本地数据库不可用');
+      return new Promise((resolve,reject)=>{
+        const tx=db.transaction(['meta','media'],'readwrite');
+        tx.objectStore('meta').put({id:entry.id,name:entry.name,size:entry.size,createdAt:entry.createdAt});
+        tx.objectStore('media').put({id:entry.id,blob:entry.file});
+        tx.oncomplete=resolve; tx.onerror=()=>reject(tx.error); tx.onabort=()=>reject(tx.error);
+      });
+    }
+    async function deleteSaved(id) {
+      const db=await dbPromise;if(!db)return;
+      return new Promise((resolve,reject)=>{
+        const tx=db.transaction(['meta','media'],'readwrite');
+        tx.objectStore('meta').delete(id);tx.objectStore('media').delete(id);
+        tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);
+      });
+    }
+    async function loadSaved() {
+      const db=await dbPromise;if(!db)return;
+      return new Promise((resolve,reject)=>{
+        const req=db.transaction('meta','readonly').objectStore('meta').getAll();
+        req.onsuccess=()=>resolve(req.result||[]);req.onerror=()=>reject(req.error);
+      });
+    }
+    async function loadBlob(id) {
+      const db=await dbPromise; if(!db)throw new Error('本地数据库不可用');
+      return new Promise((resolve,reject)=>{
+        const req=db.transaction('media','readonly').objectStore('media').get(id);
+        req.onsuccess=()=>req.result?.blob?resolve(req.result.blob):reject(new Error('文件不存在'));
+        req.onerror=()=>reject(req.error);
+      });
+    }
+    async function urlFor(entry) {
+      if(urls.has(entry.id))return urls.get(entry.id);
+      const blob=entry.file || await loadBlob(entry.id);
+      const url=URL.createObjectURL(blob);
+      urls.set(entry.id,url);
+      return url;
+    }
+    function trimUrls() {
+      const keep=new Set();
+      for(const offset of [-1,0,1])if(entries.length)keep.add(entries[(activeIndex+offset+entries.length)%entries.length]?.id);
+      for(const [id,url] of urls)if(!keep.has(id)){URL.revokeObjectURL(url);urls.delete(id);}
+    }
+    async function prewarmNeighbors() {
+      if(entries.length<2)return;
+      for(const offset of [-1,1]){
+        const e=entries[(activeIndex+offset+entries.length)%entries.length];
+        if(e && !urls.has(e.id))try{await urlFor(e);}catch(err){console.warn('预载失败',err);}
+      }
+      trimUrls();
+    }
+    function startPlayback() {
+      const maybe=video.play();
+      if(maybe?.catch)maybe.catch(()=>{
+        if(wantsSound){ wantsSound=false;video.muted=true;refresh();video.play().catch(()=>toast('播放失败：请轻点屏幕重试'));toast('Safari 限制了有声自动播放，已切换为静音'); }
+        else toast('视频无法自动播放，请轻点屏幕重试');
+      });
+    }
+    function mountUrl(url) {
+      video.pause(); video.src=url;video.muted=!wantsSound;video.classList.toggle('contain',contain);
+      video.style.display='block';video.load();
+      $('loading').style.display='none';
+      startPlayback();
+    }
+    function show(index) {
+      if(!entries.length){ activeIndex=-1;refresh();return; }
+      activeIndex=(index+entries.length)%entries.length;
+      const token=++showToken;
+      const entry=entries[activeIndex];
+      $('progressBar').style.width='0%';
+      refresh();
+      const cached=urls.get(entry.id);
+      if(cached){mountUrl(cached);trimUrls();void prewarmNeighbors();return;}
+      $('loading').style.display='block';
+      video.pause();
+      urlFor(entry).then(url=>{
+        if(token!==showToken)return;
+        mountUrl(url); trimUrls();void prewarmNeighbors();
+      }).catch(e=>{if(token!==showToken)return;$('loading').style.display='none';toast('加载失败：'+e.message,5000);});
+    }
+    function setSave(value){shouldSave=value;localStorage.setItem(key,String(value));$('saveChoice').checked=value;$('saveChoiceModal').checked=value;}
+    $('saveChoice').addEventListener('change',e=>setSave(e.target.checked));
+    $('saveChoiceModal').addEventListener('change',e=>setSave(e.target.checked));
+    const pick=()=>picker.click();
+    $('pickMain').addEventListener('click',pick);
+    $('pickHeader').addEventListener('click',pick);
+    $('pickFromSettings').addEventListener('click',()=>{$('settingsModal').style.display='none';pick();});
+    picker.addEventListener('change',async()=>{
+      const files=Array.from(picker.files||[]).filter(f=>f.type.startsWith('video/')||/\.(mp4|mov|m4v|webm|avi)$/i.test(f.name));
+      picker.value='';
+      if(!files.length){toast('没有选择可识别的视频');return;}
+      const wasEmpty=!entries.length;
+      const firstNew=entries.length;
+      const added=files.map(file=>({id:makeId(),name:file.name,size:file.size,file,createdAt:Date.now(),saved:false}));
+      entries.push(...added);
+      if(wasEmpty)show(firstNew);else refresh();
+      toast(`已导入 ${added.length} 个视频${shouldSave?'，正在保存到本机…':'（临时播放）'}`);
+      if(shouldSave){
+        if(navigator.storage?.persist)navigator.storage.persist().catch(()=>{});
+        let count=0,failed=0;
+        for(const entry of added){
+          try { await putSaved(entry);entry.saved=true;count++; }
+          catch(e){failed++;console.warn('保存失败',e);}
+          if(entries[activeIndex]?.id===entry.id)refresh();
+        }
+        toast(failed?`已保存 ${count} 个，另有 ${failed} 个未保存（可能空间不足）`:`已保存 ${count} 个视频，重开应用仍可使用`,5000);
+      }
+    });
+    function modal(id,value){$(id).style.display=value?'flex':'none';}
+    $('settingsBtn').addEventListener('click',()=>modal('settingsModal',true));
+    $('closeSettings').addEventListener('click',()=>modal('settingsModal',false));
+    $('deleteBtn').addEventListener('click',()=>modal('deleteModal',true));
+    $('cancelDelete').addEventListener('click',()=>modal('deleteModal',false));
+    $('confirmDelete').addEventListener('click',async()=>{
+      modal('deleteModal',false);
+      if(activeIndex<0)return;
+      const removed=entries[activeIndex];
+      if(removed.saved)try{await deleteSaved(removed.id);}catch(e){toast('未能删除本地副本：'+e.message);return;}
+      const url=urls.get(removed.id);if(url){URL.revokeObjectURL(url);urls.delete(removed.id);}
+      entries.splice(activeIndex,1);
+      show(Math.min(activeIndex,entries.length-1));
+      toast('已从播放列表移除，不影响相册原视频');
+    });
+    $('soundBtn').addEventListener('click',()=>{
+      wantsSound=!wantsSound;
+      video.muted=!wantsSound;
+      refresh();
+      if(video.paused)startPlayback();
+      if(wantsSound)toast('已尝试开启声音；若切换视频后被静音，是 Safari 的自动播放限制');
+    });
+    $('fitBtn').addEventListener('click',()=>{contain=!contain;video.classList.toggle('contain',contain);refresh();});
+
+    function frameFilename(entry, seconds) {
+      const base=(entry.name.replace(/\.[^.]+$/, '').replace(/[^\w\u4e00-\u9fff-]/g, '_').slice(0,55)||'video');
+      const millis=Math.round(seconds*1000);
+      return `${base}_frame_${Math.floor(millis/1000)}s_${millis%1000}ms.jpg`;
+    }
+    function closeFramePreview() {
+      modal('frameModal',false);
+      $('framePreview').removeAttribute('src');
+      $('downloadFrame').removeAttribute('href');
+      if(currentFrameUrl)URL.revokeObjectURL(currentFrameUrl);
+      currentFrameUrl=null;
+      currentFrameFile=null;
+      const resume=resumeAfterFrame;
+      resumeAfterFrame=false;
+      if(resume && entries.length && video.paused)startPlayback();
+    }
+    $('closeFrame').addEventListener('click',closeFramePreview);
+    $('saveFrameBtn').addEventListener('click',()=>{
+      if(capturePending||activeIndex<0)return;
+      if(video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA || !video.videoWidth || !video.videoHeight){
+        toast('当前视频帧尚未加载完成，请稍后再试');
+        return;
+      }
+      // Capture immediately and synchronously so playback cannot advance while exporting.
+      const entry=entries[activeIndex], time=video.currentTime;
+      const width=video.videoWidth, height=video.videoHeight;
+      const canvas=document.createElement('canvas');
+      canvas.width=width;canvas.height=height;
+      try{
+        const ctx=canvas.getContext('2d',{alpha:false});
+        if(!ctx)throw new Error('无法创建截图画布');
+        ctx.drawImage(video,0,0,width,height);
+      }catch(err){toast('无法截取当前画面：'+err.message,5000);return;}
+      const wasPlaying=!video.paused;
+      if(wasPlaying)video.pause();
+      capturePending=true;
+      $('saveFrameBtn').disabled=true;
+      canvas.toBlob(blob=>{
+        capturePending=false;
+        $('saveFrameBtn').disabled=false;
+        canvas.width=canvas.height=0;
+        if(!blob){
+          toast('截图失败：浏览器无法导出此视频帧',5000);
+          if(wasPlaying)startPlayback();
+          return;
+        }
+        currentFrameFile=new File([blob],frameFilename(entry,time),{type:'image/jpeg'});
+        if(currentFrameUrl)URL.revokeObjectURL(currentFrameUrl);
+        currentFrameUrl=URL.createObjectURL(currentFrameFile);
+        $('framePreview').src=currentFrameUrl;
+        $('frameDetail').textContent=`${width} × ${height} · JPG · ${Math.round(blob.size/1024)} KB · ${time.toFixed(2)} 秒`;
+        $('downloadFrame').href=currentFrameUrl;
+        $('downloadFrame').download=currentFrameFile.name;
+        resumeAfterFrame=wasPlaying;
+        modal('frameModal',true);
+      },'image/jpeg',0.95);
+    });
+    $('shareFrame').addEventListener('click',()=>{
+      if(!currentFrameFile)return;
+      const payload={files:[currentFrameFile]};
+      if(!navigator.share || (navigator.canShare && !navigator.canShare(payload))){
+        toast('当前浏览器无法分享图片：可长按预览图保存，或使用下载按钮',5000);
+        return;
+      }
+      // Invoke share directly from this click to retain Safari's user-activation permission.
+      try {
+        navigator.share(payload).catch(err=>{
+          if(err.name!=='AbortError')toast('分享没有完成：请长按预览图或选择下载',5000);
+        });
+      }catch(err){toast('无法打开分享菜单：请长按图片保存',5000);}
+    });
+    stage.addEventListener('touchstart',e=>{
+      if(e.touches.length!==1)return;
+      pressStart={x:e.touches[0].clientX,y:e.touches[0].clientY};
+    },{passive:true});
+    stage.addEventListener('touchmove',e=>{if(pressStart&&entries.length)e.preventDefault();},{passive:false});
+    stage.addEventListener('touchend',e=>{
+      if(!pressStart||!entries.length)return;
+      const dx=e.changedTouches[0].clientX-pressStart.x;
+      const dy=e.changedTouches[0].clientY-pressStart.y;
+      pressStart=null;
+      if(Math.abs(dy)>55&&Math.abs(dy)>Math.abs(dx)*1.2){
+        lastSwipe=Date.now();show(activeIndex+(dy<0?1:-1));
+      }
+    },{passive:true});
+    stage.addEventListener('touchcancel',()=>pressStart=null,{passive:true});
+    stage.addEventListener('click',e=>{
+      if(e.target.closest('button, .intro, label'))return;
+      if(!entries.length||Date.now()-lastSwipe<350)return;
+      if(video.paused)video.play().catch(()=>toast('无法播放此视频'));else video.pause();
+    });
+    video.addEventListener('timeupdate',()=>{
+      if(Number.isFinite(video.duration)&&video.duration>0)$('progressBar').style.width=`${Math.max(0,Math.min(100,video.currentTime/video.duration*100))}%`;
+    });
+    video.addEventListener('pause',()=>{if(entries.length){$('playPulse').style.display='grid';}});
+    video.addEventListener('playing',()=>{$('playPulse').style.display='none';});
+    video.addEventListener('error',()=>{if(video.getAttribute('src'))toast('视频格式可能不受 Safari 支持，建议 MP4/H.264 或 iPhone 原生 MOV',5000);});
+    window.addEventListener('keydown',e=>{
+      if($('frameModal').style.display==='flex'){
+        if(e.key==='Escape')closeFramePreview();
+        return;
+      }
+      if(!entries.length||$('settingsModal').style.display==='flex'||$('deleteModal').style.display==='flex')return;
+      if(['ArrowUp','ArrowDown'].includes(e.key)){e.preventDefault();show(activeIndex+(e.key==='ArrowDown'?1:-1));}
+      if(e.key===' '){e.preventDefault();if(video.paused)startPlayback();else video.pause();}
+    });
+    async function init(){
+      try {
+        const existing=(await loadSaved()).sort((a,b)=>a.createdAt-b.createdAt);
+        for(const e of existing)entries.push({...e,saved:true});
+        if(entries.length)show(0);else refresh();
+      } catch(e){console.warn('恢复保存视频失败',e);refresh();toast('保存的视频未能恢复：'+e.message,5000);}
+    }
+    init();
+    if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(e=>console.warn('Offline support unavailable',e)));
+  })();
+  </script>
+</body>
+</html>
